@@ -1,12 +1,14 @@
 
 import calendar
+import sqlite3
 from datetime import datetime
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
 class CalendarioMensual:
-    def __init__(self, master):
+    def __init__(self, master, curso):
         self.master = master
+        self.curso = curso
         self.hoy = datetime.today()
         self.anio = self.hoy.year
         self.mes = self.hoy.month
@@ -17,12 +19,9 @@ class CalendarioMensual:
         self.titulo = ttk.Label(self.cal_frame, text="", font=("Helvetica", 16, "bold"))
         self.titulo.grid(row=0, column=0, columnspan=7, pady=10)
 
-        self.header_frame = ttk.Frame(self.cal_frame)
-        self.header_frame.grid(row=1, column=0, columnspan=7)
-
         dias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
         for i, dia in enumerate(dias):
-            ttk.Label(self.header_frame, text=dia, font=("Helvetica", 16, "bold")).grid(row=0, column=i, padx=10)
+            ttk.Label(self.cal_frame, text=dia, font=("Helvetica", 10, "bold")).grid(row=1, column=i, padx=5)
 
         self.body_frame = ttk.Frame(self.cal_frame)
         self.body_frame.grid(row=2, column=0, columnspan=7, sticky="nsew")
@@ -43,48 +42,48 @@ class CalendarioMensual:
 
         self.titulo.config(text=f"{calendar.month_name[self.mes]} {self.anio}")
 
-        cal = calendar.Calendar(firstweekday=0)  # Lunes como primer día
+        cal = calendar.Calendar(firstweekday=0)
         dias_mes = cal.monthdayscalendar(self.anio, self.mes)
 
         for row_idx, semana in enumerate(dias_mes):
             for col_idx, dia in enumerate(semana):
                 if dia == 0:
-                    ttk.Label(self.body_frame, text="").grid(row=row_idx, column=col_idx, padx=5, pady=5, sticky="nsew")
+                    ttk.Label(self.body_frame, text="").grid(row=row_idx, column=col_idx, padx=5, pady=5)
                 else:
                     b = ttk.Button(self.body_frame, text=str(dia), width=4, bootstyle=INFO,
                                    command=lambda d=dia: self.dia_seleccionado(d))
                     b.grid(row=row_idx, column=col_idx, padx=3, pady=3, sticky="nsew")
 
-        for i in range(7):
-            self.body_frame.columnconfigure(i, weight=1)
-
     def mes_anterior(self):
-        if self.mes == 1:
-            self.mes = 12
-            self.anio -= 1
-        else:
-            self.mes -= 1
+        self.mes = 12 if self.mes == 1 else self.mes - 1
+        self.anio -= 1 if self.mes == 12 else 0
         self.generar_calendario()
 
     def mes_siguiente(self):
-        if self.mes == 12:
-            self.mes = 1
-            self.anio += 1
-        else:
-            self.mes += 1
+        self.mes = 1 if self.mes == 12 else self.mes + 1
+        self.anio += 1 if self.mes == 1 else 0
         self.generar_calendario()
 
     def dia_seleccionado(self, dia):
         fecha = f"{dia:02d}/{self.mes:02d}/{self.anio}"
-        print(f"Seleccionaste: {fecha}")
         self.mensaje_label.config(text=f"Seleccionaste: {fecha}", foreground="blue")
 
-# --- EJECUCIÓN PRINCIPAL ---
-if __name__ == "__main__":
-    app = ttk.Window(themename="flatly")
-    app.title("Calendario con TTK")
-    app.geometry("500x400")
+        meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
+                 "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        nombre_mes = meses[self.mes]
 
-    calendario = CalendarioMensual(app)
+        with sqlite3.connect("colegio.sqlite") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT a.apellido, a.nombre, i.clase_normal, i.ed_fisica
+                FROM inasistencias i
+                JOIN alumnos a ON i.alumno_id = a.id
+                WHERE a.curso = ? AND i.mes = ?
+            """, (self.curso, nombre_mes))
+            resultados = cursor.fetchall()
 
-    app.mainloop()
+        if resultados:
+            detalle = "\n".join([f"{a}, {n} - Normal: {cn}, Ed. Física: {ef}" for a, n, cn, ef in resultados])
+        else:
+            detalle = "No hay inasistencias para este mes."
+        self.mensaje_label.config(text=f"Inasistencias de {nombre_mes}:\n{detalle}", justify="left")
